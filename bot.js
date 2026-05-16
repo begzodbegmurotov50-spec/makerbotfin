@@ -2,11 +2,12 @@ const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const { createClient } = require("@supabase/supabase-js");
 
-const BOT_TOKEN = "8670746601:AAFwsnaGTE3bWhHMrCXPyVGFwYfszGjWAnk";
-const ADMIN_ID = "8475619369";
+const BOT_TOKEN = process.env.BOT_TOKEN || "8670746601:AAFwsnaGTE3bWhHMrCXPyVGFwYfszGjWAnk";
+const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || "8475619369";
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const WEBAPP_URL = process.env.WEBAPP_URL || "https://my-market-one.vercel.app";
+const RENDER_URL = "https://makerbotfin.onrender.com";
 
 const CARD_INFO = `💳 *TO'LOV UCHUN KARTA*
 
@@ -33,6 +34,9 @@ const adminMenu = Markup.keyboard([
   ["🔙 Foydalanuvchi rejimi"],
 ]).resize();
 
+// =====================
+// /start
+// =====================
 bot.start(async (ctx) => {
   const user = ctx.from;
   await supabase.from("users").upsert(
@@ -46,10 +50,16 @@ bot.start(async (ctx) => {
   );
 });
 
+// =====================
+// DO'KONNI OCHISH
+// =====================
 bot.hears("🛒 Do'konni ochish", async (ctx) => {
   await ctx.reply("Do'konni ochish uchun:", Markup.inlineKeyboard([[Markup.button.url("🛒 Kimoto Market", WEBAPP_URL)]]));
 });
 
+// =====================
+// HISOBIM
+// =====================
 bot.hears("💰 Hisobim", async (ctx) => {
   const { data: user } = await supabase.from("users").select("*").eq("telegram_id", ctx.from.id).single();
   if (!user) return ctx.reply("Foydalanuvchi topilmadi!");
@@ -59,12 +69,18 @@ bot.hears("💰 Hisobim", async (ctx) => {
   );
 });
 
+// =====================
+// HISOB TO'LDIRISH
+// =====================
 bot.hears("💳 Hisob to'ldirish", async (ctx) => {
   await supabase.from("users").update({ state: "waiting_amount" }).eq("telegram_id", ctx.from.id);
   await ctx.reply(CARD_INFO, { parse_mode: "Markdown" });
   await ctx.reply("💰 Qancha to'ldirmoqchisiz? Faqat raqam yozing (masalan: *50000*)", { parse_mode: "Markdown" });
 });
 
+// =====================
+// BUYURTMALARIM
+// =====================
 bot.hears("📋 Buyurtmalarim", async (ctx) => {
   const { data: orders } = await supabase.from("orders").select("*").eq("user_id", ctx.from.id).order("created_at", { ascending: false }).limit(5);
   if (!orders || orders.length === 0) return ctx.reply("📋 Sizda hali buyurtmalar yo'q.");
@@ -76,6 +92,9 @@ bot.hears("📋 Buyurtmalarim", async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
+// =====================
+// ADMIN - FOYDALANUVCHILAR
+// =====================
 bot.hears("👥 Foydalanuvchilar", async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return;
   const { data: users } = await supabase.from("users").select("*");
@@ -84,6 +103,9 @@ bot.hears("👥 Foydalanuvchilar", async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
+// =====================
+// ADMIN - BUYURTMALAR
+// =====================
 bot.hears("📦 Buyurtmalar", async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return;
   const { data: orders } = await supabase.from("orders").select("*").eq("status", "pending").order("created_at", { ascending: false }).limit(10);
@@ -93,6 +115,9 @@ bot.hears("📦 Buyurtmalar", async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
+// =====================
+// ADMIN - TO'LOVLAR
+// =====================
 bot.hears("💰 To'lovlar", async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return;
   const { data: payments } = await supabase.from("payments").select("*").eq("status", "pending").order("created_at", { ascending: false }).limit(10);
@@ -108,6 +133,9 @@ bot.hears("💰 To'lovlar", async (ctx) => {
   }
 });
 
+// =====================
+// ADMIN - STATISTIKA
+// =====================
 bot.hears("📊 Statistika", async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return;
   const { count: u } = await supabase.from("users").select("*", { count: "exact", head: true });
@@ -116,14 +144,22 @@ bot.hears("📊 Statistika", async (ctx) => {
   await ctx.reply(`📊 *Statistika*\n\n👥 Foydalanuvchilar: *${u}*\n📦 Buyurtmalar: *${o}*\n💰 To'lovlar: *${p}*`, { parse_mode: "Markdown" });
 });
 
+// =====================
+// ADMIN REJIMDAN CHIQISH
+// =====================
 bot.hears("🔙 Foydalanuvchi rejimi", async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return;
   await ctx.reply("Foydalanuvchi rejimi:", userMenu);
 });
 
+// =====================
+// MATN XABARLARI
+// =====================
+const MENU_BUTTONS = ["🛒 Do'konni ochish","💰 Hisobim","💳 Hisob to'ldirish","📋 Buyurtmalarim","👥 Foydalanuvchilar","📦 Buyurtmalar","💰 To'lovlar","📊 Statistika","🔙 Foydalanuvchi rejimi"];
+
 bot.on("text", async (ctx) => {
   const text = ctx.message.text;
-  if (text.startsWith("/") || ["🛒 Do'konni ochish","💰 Hisobim","💳 Hisob to'ldirish","📋 Buyurtmalarim","👥 Foydalanuvchilar","📦 Buyurtmalar","💰 To'lovlar","📊 Statistika","🔙 Foydalanuvchi rejimi"].includes(text)) return;
+  if (text.startsWith("/") || MENU_BUTTONS.includes(text)) return;
 
   const { data: user } = await supabase.from("users").select("*").eq("telegram_id", ctx.from.id).single();
   if (!user) return;
@@ -137,6 +173,9 @@ bot.on("text", async (ctx) => {
   }
 });
 
+// =====================
+// CHEK (RASM) QABUL QILISH
+// =====================
 bot.on("photo", async (ctx) => {
   const { data: user } = await supabase.from("users").select("*").eq("telegram_id", ctx.from.id).single();
   if (!user || user.state !== "waiting_check") return;
@@ -146,7 +185,12 @@ bot.on("photo", async (ctx) => {
 
   const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
   await bot.telegram.sendPhoto(ADMIN_ID, fileId, {
-    caption: `💰 *Yangi to'lov cheki!*\n\n👤 @${ctx.from.username || "nomsiz"}\n🆔 ID: \`${ctx.from.id}\`\n💵 Summa: *${payment.amount.toLocaleString()} UZS*\n⏰ ${new Date().toLocaleString("uz")}`,
+    caption:
+      `💰 *Yangi to'lov cheki!*\n\n` +
+      `👤 @${ctx.from.username || "nomsiz"}\n` +
+      `🆔 ID: \`${ctx.from.id}\`\n` +
+      `💵 Summa: *${payment.amount.toLocaleString()} UZS*\n` +
+      `⏰ Vaqt: ${new Date().toLocaleString("uz")}`,
     parse_mode: "Markdown",
     reply_markup: { inline_keyboard: [[
       { text: "✅ Tasdiqlash", callback_data: `pay_approve_${payment.id}_${ctx.from.id}_${payment.amount}` },
@@ -159,6 +203,9 @@ bot.on("photo", async (ctx) => {
   await ctx.reply("✅ Chekingiz qabul qilindi! Admin tekshirib, hisob to'ldiriladi. ⏳");
 });
 
+// =====================
+// CALLBACK: TO'LOV TASDIQLASH
+// =====================
 bot.action(/^pay_approve_(.+)_(\d+)_(\d+)$/, async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
   const [, paymentId, userId, amountStr] = ctx.match;
@@ -175,6 +222,9 @@ bot.action(/^pay_approve_(.+)_(\d+)_(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery("✅ Tasdiqlandi!");
 });
 
+// =====================
+// CALLBACK: TO'LOV BEKOR QILISH
+// =====================
 bot.action(/^pay_cancel_(.+)_(\d+)$/, async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
   const [, paymentId, userId] = ctx.match;
@@ -184,6 +234,9 @@ bot.action(/^pay_cancel_(.+)_(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery("❌ Bekor qilindi!");
 });
 
+// =====================
+// CALLBACK: BUYURTMA TASDIQLASH
+// =====================
 bot.action(/^approve_(.+)_(\d+)$/, async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return;
   const [, orderId, userId] = ctx.match;
@@ -193,6 +246,9 @@ bot.action(/^approve_(.+)_(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery("✅ Tasdiqlandi!");
 });
 
+// =====================
+// CALLBACK: BUYURTMA BEKOR QILISH
+// =====================
 bot.action(/^cancel_(.+)_(\d+)$/, async (ctx) => {
   if (String(ctx.from.id) !== String(ADMIN_ID)) return;
   const [, orderId, userId] = ctx.match;
@@ -202,6 +258,9 @@ bot.action(/^cancel_(.+)_(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery("❌ Bekor qilindi!");
 });
 
+// =====================
+// WEB APP DATA
+// =====================
 bot.on("web_app_data", async (ctx) => {
   let orderData;
   try { orderData = JSON.parse(ctx.webAppData.data.text()); } catch (e) { return ctx.reply("❌ Ma'lumot noto'g'ri."); }
@@ -219,7 +278,21 @@ bot.on("web_app_data", async (ctx) => {
   );
 });
 
-app.post("/api/bot", (req, res) => { bot.handleUpdate(req.body, res); });
-app.get("/api/bot", (req, res) => { res.json({ status: "Bot ishlayapti ✅" }); });
+// =====================
+// EXPRESS SERVER + WEBHOOK
+// =====================
+app.post("/api/bot", (req, res) => {
+  bot.handleUpdate(req.body, res);
+});
 
-module.exports = app;
+app.get("/", (req, res) => {
+  res.json({ status: "Bot ishlayapti ✅" });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+  console.log(`Server ${PORT} portda ishlamoqda`);
+  // Webhook o'rnatish
+  await bot.telegram.setWebhook(`${RENDER_URL}/api/bot`);
+  console.log(`Webhook o'rnatildi: ${RENDER_URL}/api/bot`);
+});
