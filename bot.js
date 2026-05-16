@@ -608,6 +608,7 @@ bot.action(/^cancel_(.+)_(\d+)$/, async (ctx) => {
 // =====================
 app.get("/", (req, res) => res.json({ status: "Bot ishlayapti ✅" }));
  
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`Server ${PORT} portda ishlamoqda`);
   await bot.telegram.deleteWebhook({ drop_pending_updates: true });
