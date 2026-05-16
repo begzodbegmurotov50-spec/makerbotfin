@@ -1,6 +1,3 @@
-
-Copy
-
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const { createClient } = require("@supabase/supabase-js");
