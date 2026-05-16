@@ -14,7 +14,7 @@ const WEBAPP_URL = process.env.WEBAPP_URL || "https://smm-market.vercel.app/";
 // =====================
 // KARTA MA'LUMOTLARI
 // =====================
-const CARD_NUMBER = "8600 1234 5678 9012";
+const CARD_NUMBER = "9860060142705601";
 const CARD_OWNER = "SMM MARKET";
 const CARD_BANK = "Uzcard";
  
