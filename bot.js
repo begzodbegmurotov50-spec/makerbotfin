@@ -1,298 +1,436 @@
+
+Copy
+
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const { createClient } = require("@supabase/supabase-js");
-
-const BOT_TOKEN = process.env.BOT_TOKEN || "8670746601:AAFwsnaGTE3bWhHMrCXPyVGFwYfszGjWAnk";
+ 
+// =====================
+// SOZLAMALAR
+// =====================
+const BOT_TOKEN = process.env.BOT_TOKEN || "8670746601:AAFwsnaGTE3bWhHMrCPyVGfWyfsGjWAnK";
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID || "8475619369";
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://xihnhbvykyjdwccvueum.supabase.co";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaG5oYnZ5a3lqZHdjY3Z1ZXVtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODY4NzI5MywiZXhwIjoyMDk0MjYzMjkzfQ.IZfWneNtSQaGwkjx5O6eC8K4lG88_G35R5CNADwqW28";
 const WEBAPP_URL = process.env.WEBAPP_URL || "https://my-market-one.vercel.app";
-const RENDER_URL = "https://makerbotfin.onrender.com";
-
-const CARD_INFO = `💳 *TO'LOV UCHUN KARTA*
-
-😈 HUMO CARD
-💳 \`9860 0301 0450 7279\`
-✈️ ISM FAMILIYA: *SH / K*
-📞 ULANGAN RAQAM: *+998918413431*
-
-✅ To'lov qilgandan keyin chekni yuboring!`;
-
+const WEBHOOK_URL = process.env.WEBHOOK_URL || "https://makerbotfin.onrender.com/api/bot";
+ 
+// Karta ma'lumotlari
+const CARD_NUMBER = "9860 0301 0450 7279";
+const CARD_OWNER = "SH / K";
+const CARD_BANK = "HUMO CARD";
+const CARD_PHONE = "+998918413431";
+ 
+// =====================
+// INIT
+// =====================
 const bot = new Telegraf(BOT_TOKEN);
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = express();
 app.use(express.json());
-
-const userMenu = Markup.keyboard([
-  ["🛒 Do'konni ochish", "💰 Hisobim"],
-  ["💳 Hisob to'ldirish", "📋 Buyurtmalarim"],
-]).resize();
-
-const adminMenu = Markup.keyboard([
-  ["👥 Foydalanuvchilar", "📦 Buyurtmalar"],
-  ["💰 To'lovlar", "📊 Statistika"],
-  ["🔙 Foydalanuvchi rejimi"],
-]).resize();
-
+ 
+// =====================
+// HELPERS
+// =====================
+async function getBalance(telegram_id) {
+  const { data } = await supabase
+    .from("users")
+    .select("balance")
+    .eq("telegram_id", telegram_id)
+    .single();
+  return data?.balance || 0;
+}
+ 
+async function registerUser(user) {
+  await supabase.from("users").upsert(
+    {
+      telegram_id: user.id,
+      username: user.username || null,
+      full_name: `${user.first_name} ${user.last_name || ""}`.trim(),
+      balance: 0,
+    },
+    { onConflict: "telegram_id", ignoreDuplicates: true }
+  );
+}
+ 
+function isAdmin(id) {
+  return String(id) === String(ADMIN_ID);
+}
+ 
+function mainMenu(admin = false) {
+  const buttons = [
+    [Markup.button.webApp("🛒 Do'konni ochish", WEBAPP_URL)],
+    ["💰 Hisobim", "➕ Hisob to'ldirish"],
+  ];
+  if (admin) buttons.push(["⚙️ Admin panel"]);
+  return Markup.keyboard(buttons).resize();
+}
+ 
 // =====================
 // /start
 // =====================
 bot.start(async (ctx) => {
-  const user = ctx.from;
-  await supabase.from("users").upsert(
-    { telegram_id: user.id, username: user.username || null, full_name: `${user.first_name} ${user.last_name || ""}`.trim(), balance: 0 },
-    { onConflict: "telegram_id" }
-  );
-  const isAdmin = String(user.id) === String(ADMIN_ID);
+  await registerUser(ctx.from);
   await ctx.reply(
-    `👋 Xush kelibsiz, *${user.first_name}*!\n\nKIMOTO MARKET botiga xush kelibsiz! 🛒`,
-    { parse_mode: "Markdown", ...(isAdmin ? adminMenu : userMenu) }
+    `👋 Xush kelibsiz, ${ctx.from.first_name}!\n\nKIMOTO MARKET ga xush kelibsiz! 🛒`,
+    mainMenu(isAdmin(ctx.from.id))
   );
 });
-
-// =====================
-// DO'KONNI OCHISH
-// =====================
-bot.hears("🛒 Do'konni ochish", async (ctx) => {
-  await ctx.reply("Do'konni ochish uchun:", Markup.inlineKeyboard([[Markup.button.url("🛒 Kimoto Market", WEBAPP_URL)]]));
-});
-
+ 
 // =====================
 // HISOBIM
 // =====================
 bot.hears("💰 Hisobim", async (ctx) => {
-  const { data: user } = await supabase.from("users").select("*").eq("telegram_id", ctx.from.id).single();
-  if (!user) return ctx.reply("Foydalanuvchi topilmadi!");
+  const balance = await getBalance(ctx.from.id);
   await ctx.reply(
-    `💰 *Hisobingiz*\n\n👤 Ism: *${user.full_name}*\n🆔 ID: \`${user.telegram_id}\`\n💵 Balans: *${(user.balance || 0).toLocaleString()} UZS*`,
-    { parse_mode: "Markdown" }
+    `💰 Sizning hisobingiz\n\n` +
+    `👤 Ism: ${ctx.from.first_name}\n` +
+    `🆔 ID: ${ctx.from.id}\n` +
+    `💵 Balans: ${balance.toLocaleString()} UZS`,
+    { parse_mode: "HTML" }
   );
 });
-
+ 
 // =====================
 // HISOB TO'LDIRISH
 // =====================
-bot.hears("💳 Hisob to'ldirish", async (ctx) => {
-  await supabase.from("users").update({ state: "waiting_amount" }).eq("telegram_id", ctx.from.id);
-  await ctx.reply(CARD_INFO, { parse_mode: "Markdown" });
-  await ctx.reply("💰 Qancha to'ldirmoqchisiz? Faqat raqam yozing (masalan: *50000*)", { parse_mode: "Markdown" });
+bot.hears("➕ Hisob to'ldirish", async (ctx) => {
+  await ctx.reply(
+    `TO'LOV UCHUN KARTA\n\n` +
+    `🏦 ${CARD_BANK}\n` +
+    `💳 ${CARD_NUMBER}\n` +
+    `👤 ISM FAMILIYA: ${CARD_OWNER}\n` +
+    `📞 ULANGAN RAQAM: ${CARD_PHONE}\n\n` +
+    `✅ To'lov qilgandan keyin chekni yuboring!`,
+    {
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("✅ To'lov qildim", "payment_done")],
+        [Markup.button.callback("❌ Bekor qilish", "cancel_payment")],
+      ]),
+    }
+  );
 });
-
-// =====================
-// BUYURTMALARIM
-// =====================
-bot.hears("📋 Buyurtmalarim", async (ctx) => {
-  const { data: orders } = await supabase.from("orders").select("*").eq("user_id", ctx.from.id).order("created_at", { ascending: false }).limit(5);
-  if (!orders || orders.length === 0) return ctx.reply("📋 Sizda hali buyurtmalar yo'q.");
-  let text = "📋 *So'nggi buyurtmalaringiz:*\n\n";
-  orders.forEach((o, i) => {
-    const s = o.status === "completed" ? "✅" : o.status === "cancelled" ? "❌" : "⏳";
-    text += `${i + 1}. ${s} ${o.product_name} — *${o.amount} UZS*\n`;
-  });
-  await ctx.reply(text, { parse_mode: "Markdown" });
+ 
+bot.action("payment_done", async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply("💵 Qancha to'ldirmoqchisiz? Faqat raqam yozing (masalan: 50000)");
+  await supabase.from("user_states").upsert(
+    { telegram_id: ctx.from.id, state: "waiting_amount" },
+    { onConflict: "telegram_id" }
+  );
 });
-
-// =====================
-// ADMIN - FOYDALANUVCHILAR
-// =====================
-bot.hears("👥 Foydalanuvchilar", async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return;
-  const { data: users } = await supabase.from("users").select("*");
-  let text = `👥 *Foydalanuvchilar: ${users?.length || 0} ta*\n\n`;
-  users?.slice(0, 15).forEach((u) => { text += `• ${u.full_name} (@${u.username || "nomsiz"}) — *${(u.balance || 0).toLocaleString()} UZS*\n`; });
-  await ctx.reply(text, { parse_mode: "Markdown" });
+ 
+bot.action("cancel_payment", async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.deleteMessage();
+  await ctx.reply("❌ Bekor qilindi.", mainMenu(isAdmin(ctx.from.id)));
 });
-
+ 
 // =====================
-// ADMIN - BUYURTMALAR
+// MATN HANDLER
 // =====================
-bot.hears("📦 Buyurtmalar", async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return;
-  const { data: orders } = await supabase.from("orders").select("*").eq("status", "pending").order("created_at", { ascending: false }).limit(10);
-  if (!orders || orders.length === 0) return ctx.reply("📦 Kutayotgan buyurtmalar yo'q.");
-  let text = `📦 *Kutayotgan buyurtmalar: ${orders.length} ta*\n\n`;
-  orders.forEach((o, i) => { text += `${i + 1}. 👤 ID: ${o.user_id}\n   📦 ${o.product_name} — *${o.amount} UZS*\n\n`; });
-  await ctx.reply(text, { parse_mode: "Markdown" });
-});
-
-// =====================
-// ADMIN - TO'LOVLAR
-// =====================
-bot.hears("💰 To'lovlar", async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return;
-  const { data: payments } = await supabase.from("payments").select("*").eq("status", "pending").order("created_at", { ascending: false }).limit(10);
-  if (!payments || payments.length === 0) return ctx.reply("💰 Kutayotgan to'lovlar yo'q.");
-  for (const p of payments) {
-    await bot.telegram.sendMessage(ADMIN_ID,
-      `💰 *Yangi to'lov*\n\n👤 @${p.username || "nomsiz"} (ID: \`${p.user_id}\`)\n💵 Summa: *${p.amount.toLocaleString()} UZS*\n⏰ ${new Date(p.created_at).toLocaleString()}`,
-      { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[
-        { text: "✅ Tasdiqlash", callback_data: `pay_approve_${p.id}_${p.user_id}_${p.amount}` },
-        { text: "❌ Bekor qilish", callback_data: `pay_cancel_${p.id}_${p.user_id}` },
-      ]] } }
+bot.on("text", async (ctx) => {
+  const userId = ctx.from.id;
+  const text = ctx.message.text;
+ 
+  if (text === "⚙️ Admin panel") {
+    if (!isAdmin(userId)) return ctx.reply("❌ Ruxsat yo'q!");
+    return ctx.reply(
+      "⚙️ Admin Panel",
+      {
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("👥 Foydalanuvchilar", "admin_users")],
+          [Markup.button.callback("📦 Buyurtmalar", "admin_orders")],
+          [Markup.button.callback("💳 To'lov so'rovlari", "admin_payments")],
+          [Markup.button.callback("📊 Statistika", "admin_stats")],
+        ]),
+      }
+    );
+  }
+ 
+  const { data: stateData } = await supabase
+    .from("user_states")
+    .select("state, pending_amount")
+    .eq("telegram_id", userId)
+    .single();
+ 
+  const state = stateData?.state;
+ 
+  if (state === "waiting_amount") {
+    const amount = parseInt(text.replace(/\s/g, "").replace(/,/g, ""));
+    if (isNaN(amount) || amount < 1000) {
+      return ctx.reply("❌ Noto'g'ri summa. Minimal 1,000 UZS. Qayta kiriting:");
+    }
+    await supabase.from("user_states").upsert(
+      { telegram_id: userId, state: "waiting_check", pending_amount: amount },
+      { onConflict: "telegram_id" }
+    );
+    return ctx.reply(
+      `✅ Summa: ${amount.toLocaleString()} UZS\n\n📸 Endi to'lov chekini yuboring (rasm yoki screenshot)`
     );
   }
 });
-
+ 
 // =====================
-// ADMIN - STATISTIKA
+// CHEK HANDLER
 // =====================
-bot.hears("📊 Statistika", async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return;
-  const { count: u } = await supabase.from("users").select("*", { count: "exact", head: true });
-  const { count: o } = await supabase.from("orders").select("*", { count: "exact", head: true });
-  const { count: p } = await supabase.from("payments").select("*", { count: "exact", head: true });
-  await ctx.reply(`📊 *Statistika*\n\n👥 Foydalanuvchilar: *${u}*\n📦 Buyurtmalar: *${o}*\n💰 To'lovlar: *${p}*`, { parse_mode: "Markdown" });
-});
-
-// =====================
-// ADMIN REJIMDAN CHIQISH
-// =====================
-bot.hears("🔙 Foydalanuvchi rejimi", async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return;
-  await ctx.reply("Foydalanuvchi rejimi:", userMenu);
-});
-
-// =====================
-// MATN XABARLARI
-// =====================
-const MENU_BUTTONS = ["🛒 Do'konni ochish","💰 Hisobim","💳 Hisob to'ldirish","📋 Buyurtmalarim","👥 Foydalanuvchilar","📦 Buyurtmalar","💰 To'lovlar","📊 Statistika","🔙 Foydalanuvchi rejimi"];
-
-bot.on("text", async (ctx) => {
-  const text = ctx.message.text;
-  if (text.startsWith("/") || MENU_BUTTONS.includes(text)) return;
-
-  const { data: user } = await supabase.from("users").select("*").eq("telegram_id", ctx.from.id).single();
-  if (!user) return;
-
-  if (user.state === "waiting_amount") {
-    const amount = parseInt(text.replace(/\D/g, ""));
-    if (!amount || amount < 1000) return ctx.reply("❌ Kamida 1,000 UZS kiriting!");
-    await supabase.from("payments").insert({ user_id: ctx.from.id, username: ctx.from.username || null, amount, status: "waiting_check" });
-    await supabase.from("users").update({ state: "waiting_check" }).eq("telegram_id", ctx.from.id);
-    await ctx.reply(`✅ *${amount.toLocaleString()} UZS* uchun to'lov:\n\n${CARD_INFO}\n\n📸 Endi to'lov chekini (screenshot) yuboring!`, { parse_mode: "Markdown" });
+bot.on(["photo", "document"], async (ctx) => {
+  const userId = ctx.from.id;
+ 
+  const { data: stateData } = await supabase
+    .from("user_states")
+    .select("state, pending_amount")
+    .eq("telegram_id", userId)
+    .single();
+ 
+  if (stateData?.state !== "waiting_check") return;
+ 
+  const amount = stateData.pending_amount;
+  const user = ctx.from;
+ 
+  const { data: payReq, error } = await supabase
+    .from("payment_requests")
+    .insert({
+      user_id: userId,
+      username: user.username || null,
+      full_name: `${user.first_name} ${user.last_name || ""}`.trim(),
+      amount: amount,
+      status: "pending",
+    })
+    .select()
+    .single();
+ 
+  if (error) {
+    console.error("Payment request error:", error.message);
+    return ctx.reply("❌ Xatolik yuz berdi. Qayta urinib ko'ring.");
+  }
+ 
+  await supabase.from("user_states").upsert(
+    { telegram_id: userId, state: null, pending_amount: null },
+    { onConflict: "telegram_id" }
+  );
+ 
+  await ctx.reply(
+    `✅ Chekingiz qabul qilindi!\n💵 Summa: ${amount.toLocaleString()} UZS\n⏳ Admin tekshirib, hisobingizga qo'shadi. Kuting!`
+  );
+ 
+  const caption =
+    `Yangi to'lov so'rovi!\n\n` +
+    `👤 Ism: ${user.first_name} ${user.last_name || ""}\n` +
+    `🆔 Telegram ID: ${userId}\n` +
+    `📛 Username: ${user.username ? "@" + user.username : "yo'q"}\n` +
+    `💵 Summa: ${amount.toLocaleString()} UZS\n` +
+    `🕐 Vaqt: ${new Date().toLocaleString("uz-UZ")}\n` +
+    `🆔 So'rov ID: ${payReq.id}`;
+ 
+  const keyboard = {
+    inline_keyboard: [[
+      { text: "✅ Tasdiqlash", callback_data: `pay_ok_${payReq.id}_${userId}_${amount}` },
+      { text: "❌ Rad etish", callback_data: `pay_no_${payReq.id}_${userId}` },
+    ]],
+  };
+ 
+  try {
+    if (ctx.message.photo) {
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      await bot.telegram.sendPhoto(ADMIN_ID, photo.file_id, {
+        caption,
+        reply_markup: keyboard,
+      });
+    } else {
+      await bot.telegram.sendDocument(ADMIN_ID, ctx.message.document.file_id, {
+        caption,
+        reply_markup: keyboard,
+      });
+    }
+  } catch (e) {
+    console.error("Admin xabar xatosi:", e.message);
   }
 });
-
+ 
 // =====================
-// CHEK (RASM) QABUL QILISH
+// TO'LOV TASDIQLASH
 // =====================
-bot.on("photo", async (ctx) => {
-  const { data: user } = await supabase.from("users").select("*").eq("telegram_id", ctx.from.id).single();
-  if (!user || user.state !== "waiting_check") return;
-
-  const { data: payment } = await supabase.from("payments").select("*").eq("user_id", ctx.from.id).eq("status", "waiting_check").order("created_at", { ascending: false }).limit(1).single();
-  if (!payment) return ctx.reply("❌ To'lov topilmadi. Qaytadan boshlang.");
-
-  const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-  await bot.telegram.sendPhoto(ADMIN_ID, fileId, {
-    caption:
-      `💰 *Yangi to'lov cheki!*\n\n` +
-      `👤 @${ctx.from.username || "nomsiz"}\n` +
-      `🆔 ID: \`${ctx.from.id}\`\n` +
-      `💵 Summa: *${payment.amount.toLocaleString()} UZS*\n` +
-      `⏰ Vaqt: ${new Date().toLocaleString("uz")}`,
-    parse_mode: "Markdown",
-    reply_markup: { inline_keyboard: [[
-      { text: "✅ Tasdiqlash", callback_data: `pay_approve_${payment.id}_${ctx.from.id}_${payment.amount}` },
-      { text: "❌ Bekor qilish", callback_data: `pay_cancel_${payment.id}_${ctx.from.id}` },
-    ]] },
-  });
-
-  await supabase.from("payments").update({ status: "pending" }).eq("id", payment.id);
-  await supabase.from("users").update({ state: null }).eq("telegram_id", ctx.from.id);
-  await ctx.reply("✅ Chekingiz qabul qilindi! Admin tekshirib, hisob to'ldiriladi. ⏳");
-});
-
-// =====================
-// CALLBACK: TO'LOV TASDIQLASH
-// =====================
-bot.action(/^pay_approve_(.+)_(\d+)_(\d+)$/, async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
-  const [, paymentId, userId, amountStr] = ctx.match;
-  const amount = parseInt(amountStr);
-  const { data: user } = await supabase.from("users").select("balance").eq("telegram_id", userId).single();
-  const newBalance = (user?.balance || 0) + amount;
+bot.action(/^pay_ok_(.+)_(\d+)_(\d+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const reqId = ctx.match[1];
+  const userId = parseInt(ctx.match[2]);
+  const amount = parseInt(ctx.match[3]);
+ 
+  const currentBalance = await getBalance(userId);
+  const newBalance = currentBalance + amount;
+ 
   await supabase.from("users").update({ balance: newBalance }).eq("telegram_id", userId);
-  await supabase.from("payments").update({ status: "completed" }).eq("id", paymentId);
-  try { await ctx.editMessageCaption(ctx.callbackQuery.message.caption + "\n\n✅ *TASDIQLANDI*", { parse_mode: "Markdown" }); } catch(e) {}
-  await bot.telegram.sendMessage(userId,
-    `✅ *To'lovingiz tasdiqlandi!*\n\n💵 Qo'shildi: *+${amount.toLocaleString()} UZS*\n💰 Yangi balans: *${newBalance.toLocaleString()} UZS*\n\nRahmat! 🎉`,
-    { parse_mode: "Markdown" }
+  await supabase.from("payment_requests").update({ status: "approved" }).eq("id", reqId);
+ 
+  try {
+    const oldCaption = ctx.callbackQuery.message.caption || "";
+    await ctx.editMessageCaption(oldCaption + "\n\n✅ TASDIQLANDI");
+  } catch (e) {}
+ 
+  await bot.telegram.sendMessage(
+    userId,
+    `✅ To'lovingiz tasdiqlandi!\n\n💵 +${amount.toLocaleString()} UZS qo'shildi.\n💰 Joriy balans: ${newBalance.toLocaleString()} UZS\n\nRahmat!`
   );
   await ctx.answerCbQuery("✅ Tasdiqlandi!");
 });
-
+ 
 // =====================
-// CALLBACK: TO'LOV BEKOR QILISH
+// TO'LOV RAD ETISH
 // =====================
-bot.action(/^pay_cancel_(.+)_(\d+)$/, async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
-  const [, paymentId, userId] = ctx.match;
-  await supabase.from("payments").update({ status: "cancelled" }).eq("id", paymentId);
-  try { await ctx.editMessageCaption(ctx.callbackQuery.message.caption + "\n\n❌ *BEKOR QILINDI*", { parse_mode: "Markdown" }); } catch(e) {}
-  await bot.telegram.sendMessage(userId, `❌ *Arizangiz qabul qilinmadi!*\n\nTo'lovingiz tasdiqlanmadi. To'g'ri chek yuboring yoki admin bilan bog'laning.`, { parse_mode: "Markdown" });
-  await ctx.answerCbQuery("❌ Bekor qilindi!");
+bot.action(/^pay_no_(.+)_(\d+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const reqId = ctx.match[1];
+  const userId = parseInt(ctx.match[2]);
+ 
+  await supabase.from("payment_requests").update({ status: "rejected" }).eq("id", reqId);
+ 
+  try {
+    const oldCaption = ctx.callbackQuery.message.caption || "";
+    await ctx.editMessageCaption(oldCaption + "\n\n❌ RAD ETILDI");
+  } catch (e) {}
+ 
+  await bot.telegram.sendMessage(
+    userId,
+    `❌ Arizangiz qabul qilinmadi.\n\nTo'lovingiz tasdiqlanmadi. Qayta urinib ko'ring yoki admin bilan bog'laning.`
+  );
+  await ctx.answerCbQuery("❌ Rad etildi!");
 });
-
+ 
 // =====================
-// CALLBACK: BUYURTMA TASDIQLASH
+// ADMIN PANELI
 // =====================
-bot.action(/^approve_(.+)_(\d+)$/, async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return;
-  const [, orderId, userId] = ctx.match;
-  await supabase.from("orders").update({ status: "completed" }).eq("id", orderId);
-  try { await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n✅ *TASDIQLANDI*", { parse_mode: "Markdown" }); } catch(e) {}
-  await bot.telegram.sendMessage(userId, `✅ *Buyurtmangiz tasdiqlandi!*\n\nTez orada yetkaziladi. Rahmat! 🙏`, { parse_mode: "Markdown" });
-  await ctx.answerCbQuery("✅ Tasdiqlandi!");
+bot.action("admin_users", async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const { data: users, count } = await supabase
+    .from("users").select("*", { count: "exact" })
+    .order("created_at", { ascending: false }).limit(10);
+  let text = `👥 Foydalanuvchilar (jami: ${count})\n\n`;
+  users?.forEach((u, i) => {
+    text += `${i + 1}. ${u.full_name || "Nomsiz"} ${u.username ? "@" + u.username : ""}\n`;
+    text += `   💰 ${(u.balance || 0).toLocaleString()} UZS | ID: ${u.telegram_id}\n\n`;
+  });
+  await ctx.answerCbQuery();
+  await ctx.reply(text);
 });
-
-// =====================
-// CALLBACK: BUYURTMA BEKOR QILISH
-// =====================
-bot.action(/^cancel_(.+)_(\d+)$/, async (ctx) => {
-  if (String(ctx.from.id) !== String(ADMIN_ID)) return;
-  const [, orderId, userId] = ctx.match;
-  await supabase.from("orders").update({ status: "cancelled" }).eq("id", orderId);
-  try { await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n❌ *BEKOR QILINDI*", { parse_mode: "Markdown" }); } catch(e) {}
-  await bot.telegram.sendMessage(userId, `❌ *Buyurtmangiz bekor qilindi.*`, { parse_mode: "Markdown" });
-  await ctx.answerCbQuery("❌ Bekor qilindi!");
+ 
+bot.action("admin_orders", async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const { data: orders } = await supabase
+    .from("orders").select("*")
+    .order("created_at", { ascending: false }).limit(10);
+  let text = `📦 So'nggi buyurtmalar\n\n`;
+  if (!orders?.length) { text += "Hozircha buyurtma yo'q."; }
+  else {
+    orders.forEach((o, i) => {
+      const s = o.status === "completed" ? "✅" : o.status === "cancelled" ? "❌" : "⏳";
+      text += `${i + 1}. ${s} ${o.product_name}\n   💰 ${(o.amount || 0).toLocaleString()} UZS\n\n`;
+    });
+  }
+  await ctx.answerCbQuery();
+  await ctx.reply(text);
 });
-
+ 
+bot.action("admin_payments", async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const { data: payments } = await supabase
+    .from("payment_requests").select("*")
+    .order("created_at", { ascending: false }).limit(10);
+  let text = `💳 So'nggi to'lov so'rovlari\n\n`;
+  if (!payments?.length) { text += "Hozircha so'rov yo'q."; }
+  else {
+    payments.forEach((p, i) => {
+      const s = p.status === "approved" ? "✅" : p.status === "rejected" ? "❌" : "⏳";
+      text += `${i + 1}. ${s} ${p.full_name || "Nomsiz"}\n   💵 ${(p.amount || 0).toLocaleString()} UZS\n\n`;
+    });
+  }
+  await ctx.answerCbQuery();
+  await ctx.reply(text);
+});
+ 
+bot.action("admin_stats", async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const { count: userCount } = await supabase.from("users").select("*", { count: "exact", head: true });
+  const { count: orderCount } = await supabase.from("orders").select("*", { count: "exact", head: true });
+  const { count: pendingCount } = await supabase.from("payment_requests").select("*", { count: "exact", head: true }).eq("status", "pending");
+  const { data: approved } = await supabase.from("payment_requests").select("amount").eq("status", "approved");
+  const totalDeposit = approved?.reduce((s, p) => s + (p.amount || 0), 0) || 0;
+  await ctx.answerCbQuery();
+  await ctx.reply(
+    `📊 Statistika\n\n` +
+    `👥 Foydalanuvchilar: ${userCount}\n` +
+    `📦 Buyurtmalar: ${orderCount}\n` +
+    `💰 Tasdiqlangan to'lovlar: ${totalDeposit.toLocaleString()} UZS\n` +
+    `⏳ Kutilayotgan: ${pendingCount}`
+  );
+});
+ 
 // =====================
-// WEB APP DATA
+// WEB APP BUYURTMA
 // =====================
 bot.on("web_app_data", async (ctx) => {
   let orderData;
-  try { orderData = JSON.parse(ctx.webAppData.data.text()); } catch (e) { return ctx.reply("❌ Ma'lumot noto'g'ri."); }
+  try { orderData = JSON.parse(ctx.webAppData.data.text()); }
+  catch (e) { return ctx.reply("❌ Ma'lumot noto'g'ri formatda."); }
+ 
   const { name, amount, product_id } = orderData;
   const userId = ctx.from.id;
-  const { data: order, error } = await supabase.from("orders").insert({ user_id: userId, product_name: name, amount, product_id: product_id || null, status: "pending" }).select().single();
+ 
+  const { data: order, error } = await supabase.from("orders")
+    .insert({ user_id: userId, product_name: name, amount, product_id: product_id || null, status: "pending" })
+    .select().single();
+ 
   if (error) return ctx.reply("❌ Buyurtma saqlashda xatolik.");
-  await ctx.reply(`✅ Buyurtmangiz qabul qilindi!\n\n📦 ${name}\n💰 ${amount} UZS\n⏳ Ko'rib chiqilmoqda...`);
-  await bot.telegram.sendMessage(ADMIN_ID,
-    `🛒 *Yangi buyurtma!*\n\n👤 @${ctx.from.username || "nomsiz"} (ID: \`${userId}\`)\n📦 *${name}*\n💰 *${amount} UZS*`,
-    { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[
-      { text: "✅ Tasdiqlash", callback_data: `approve_${order.id}_${userId}` },
-      { text: "❌ Bekor qilish", callback_data: `cancel_${order.id}_${userId}` },
-    ]] } }
+ 
+  await ctx.reply(`✅ Buyurtma qabul qilindi!\n📦 ${name}\n💰 ${amount} UZS`);
+ 
+  await bot.telegram.sendMessage(
+    ADMIN_ID,
+    `🛒 Yangi buyurtma!\n\n👤 ${ctx.from.first_name} (ID: ${userId})\n📦 ${name}\n💰 ${amount} UZS\n🆔 ${order.id}`,
+    {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "✅ Tasdiqlash", callback_data: `order_ok_${order.id}_${userId}` },
+          { text: "❌ Bekor qilish", callback_data: `order_no_${order.id}_${userId}` },
+        ]],
+      },
+    }
   );
 });
-
+ 
+bot.action(/^order_ok_(.+)_(\d+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const [, orderId, userId] = ctx.match;
+  await supabase.from("orders").update({ status: "completed" }).eq("id", orderId);
+  try { await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n✅ TASDIQLANDI"); } catch (e) {}
+  await bot.telegram.sendMessage(userId, `✅ Buyurtmangiz tasdiqlandi! Rahmat!`);
+  await ctx.answerCbQuery("✅ Tasdiqlandi!");
+});
+ 
+bot.action(/^order_no_(.+)_(\d+)$/, async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery("❌ Ruxsat yo'q!");
+  const [, orderId, userId] = ctx.match;
+  await supabase.from("orders").update({ status: "cancelled" }).eq("id", orderId);
+  try { await ctx.editMessageText(ctx.callbackQuery.message.text + "\n\n❌ BEKOR QILINDI"); } catch (e) {}
+  await bot.telegram.sendMessage(userId, `❌ Buyurtmangiz bekor qilindi.`);
+  await ctx.answerCbQuery("❌ Bekor qilindi!");
+});
+ 
 // =====================
-// EXPRESS SERVER + WEBHOOK
+// WEBHOOK ENDPOINT
 // =====================
 app.post("/api/bot", (req, res) => {
   bot.handleUpdate(req.body, res);
 });
-
-app.get("/", (req, res) => {
-  res.json({ status: "Bot ishlayapti ✅" });
-});
-
+ 
+app.get("/", (req, res) => res.json({ status: "Bot ishlayapti ✅" }));
+ 
+// =====================
+// ISHGA TUSHIRISH
+// =====================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`Server ${PORT} portda ishlamoqda`);
-  // Webhook o'rnatish
-  await bot.telegram.setWebhook(`${RENDER_URL}/api/bot`);
-  console.log(`Webhook o'rnatildi: ${RENDER_URL}/api/bot`);
+  await bot.telegram.setWebhook(WEBHOOK_URL);
+  console.log(`Webhook o'rnatildi: ${WEBHOOK_URL}`);
 });
