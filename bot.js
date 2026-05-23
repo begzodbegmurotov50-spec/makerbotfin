@@ -8,7 +8,7 @@ const { createClient } = require("@supabase/supabase-js");
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ORDER_ADMIN_ID = "8460149040";
 const PAYMENT_ADMIN_ID = "6977389437";
-const SUPER_ADMIN_ID = "8460149040";
+const SUPER_ADMIN_ID = "8475619369";
  
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
