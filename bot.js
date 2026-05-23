@@ -6,9 +6,9 @@ const { createClient } = require("@supabase/supabase-js");
 // SOZLAMALAR
 // =====================
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const ORDER_ADMIN_ID = "8460149040";    // Buyurtmalar admini
-const PAYMENT_ADMIN_ID = "6977389437"; // To'lov admini
-const SUPER_ADMIN_ID = "8460149040";   // Qo'llanma va asosiy admin
+const ORDER_ADMIN_ID = "8475619369";    // Buyurtmalar admini
+const PAYMENT_ADMIN_ID = "6590911599"; // To'lov admini
+const SUPER_ADMIN_ID = "8475619369";   // Qo'llanma va asosiy admin
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
