@@ -17,9 +17,9 @@ const WEBHOOK_URL = process.env.WEBHOOK_URL || "https://makerbotfin.onrender.com
 const BOT_USERNAME = "SMM_MARKET_BOT";
 
 // Karta
-const CARD_NUMBER = "9860060142705601";
-const CARD_OWNER = "SMM MARKET";
-const CARD_BANK = "Uzcard";
+const CARD_NUMBER = "9860 0301 0450 7279 ";
+const CARD_OWNER = "Shakhnoza Kuldasheva ";
+const CARD_BANK = "HUMO";
 const MIN_AMOUNT = 1000;
 const REFERRAL_BONUS = 100;
 
