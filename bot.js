@@ -1,3 +1,4 @@
+
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const { createClient } = require("@supabase/supabase-js");
@@ -237,7 +238,9 @@ bot.hears("📦 Buyurtmalarim", async (ctx) => {
 // HISOB TO'LDIRISH
 // =====================
 bot.hears("➕ Hisob to'ldirish", async (ctx) => {
+  // Avvalgi stateni tozalaymiz
   await setState(ctx.from.id, null);
+ 
   await ctx.reply(
     `➕ Hisob to'ldirish\n\n` +
     `Quyidagi kartaga to'lov qiling:\n\n` +
@@ -254,16 +257,30 @@ bot.hears("➕ Hisob to'ldirish", async (ctx) => {
  
 bot.action("payment_done", async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.editMessageText(
-    `💵 Qancha to'lov qildingiz?\n\nMinimal: ${MIN_AMOUNT.toLocaleString()} UZS\n\nFaqat raqam yozing:`
+ 
+  const userId = ctx.from.id;
+ 
+  // ✅ TUZATISH: editMessageText o'rniga yangi xabar yuboramiz
+  // Bu yerda foydalanuvchi aniq ko'radi qayerga yozishi kerakligini
+  try {
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+  } catch (e) {}
+ 
+  await setState(userId, "waiting_amount");
+ 
+  await ctx.reply(
+    `💵 Qancha to'lov qildingiz?\n\n` +
+    `Minimal summa: ${MIN_AMOUNT.toLocaleString()} UZS\n\n` +
+    `👇 Faqat raqam yozing (masalan: 50000):`,
+    Markup.forceReply()
   );
-  await setState(ctx.from.id, "waiting_amount");
 });
  
 bot.action("cancel_payment", async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.deleteMessage();
   await setState(ctx.from.id, null);
+  await ctx.reply("❌ To'ldirish bekor qilindi.", mainMenu(isAdmin(ctx.from.id)));
 });
  
 // =====================
@@ -292,16 +309,30 @@ bot.on("text", async (ctx) => {
   const stateData = await getState(userId);
   const state = stateData?.state;
  
+  // ✅ DEBUG: state ni log qilamiz
+  console.log(`[TEXT] userId=${userId} state=${state} text="${text}"`);
+ 
   // Summa kutilmoqda
   if (state === "waiting_amount") {
-    const amount = parseInt(text.replace(/\s/g, "").replace(/,/g, ""));
+    // Faqat raqamli belgilarni olamiz
+    const cleaned = text.replace(/\s/g, "").replace(/,/g, "").replace(/\./g, "");
+    const amount = parseInt(cleaned);
+ 
     if (isNaN(amount) || amount < MIN_AMOUNT) {
-      return ctx.reply(`❌ Minimal summa ${MIN_AMOUNT.toLocaleString()} UZS. Qayta kiriting:`);
+      return ctx.reply(
+        `❌ Noto'g'ri summa!\n\n` +
+        `Minimal: ${MIN_AMOUNT.toLocaleString()} UZS\n\n` +
+        `Faqat raqam kiriting (masalan: 50000):`
+      );
     }
+ 
+    // ✅ State ni yangilaymiz - waiting_check ga o'tkazamiz
     await setState(userId, "waiting_check", amount);
+ 
     return ctx.reply(
-      `✅ Summa: ${amount.toLocaleString()} UZS\n\n` +
-      `📸 Endi to'lov chekini yuboring (rasm yoki screenshot):`
+      `✅ Summa qabul qilindi: ${amount.toLocaleString()} UZS\n\n` +
+      `📸 Endi to'lov chekini yuboring:\n` +
+      `(Rasm yoki screenshot sifatida)`
     );
   }
  
@@ -339,6 +370,9 @@ bot.on("video", async (ctx) => {
 bot.on(["photo", "document"], async (ctx) => {
   const userId = ctx.from.id;
   const stateData = await getState(userId);
+ 
+  console.log(`[PHOTO/DOC] userId=${userId} state=${stateData?.state}`);
+ 
   if (stateData?.state !== "waiting_check") return;
  
   const amount = stateData.pending_amount;
